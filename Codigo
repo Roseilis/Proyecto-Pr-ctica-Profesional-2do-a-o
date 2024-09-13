@@ -1,0 +1,354 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.models import load_model
+import joblib
+import tkinter as tk
+from tkinter import messagebox
+import datetime
+
+
+def calcular_fecha_parto(ultima_menstruacion, duracion_periodo):
+    fecha_ultima_menstruacion = datetime.datetime.strptime(ultima_menstruacion, '%Y-%m-%d')
+    fecha_parto = fecha_ultima_menstruacion + datetime.timedelta(days=280)
+    return fecha_parto
+
+def es_hipertensa(presiones):
+
+    return any(p[0] > 140 or p[1] > 90 for p in presiones)
+
+def calcular_imc(peso, talla):
+    imc = peso / (talla ** 2)
+    if imc < 18.5:
+        return "Bajo peso"
+    elif imc > 25:
+        return "Sobrepeso"
+    else:
+        return "Peso normal"
+
+def calcular_anemia(hemoglobina):
+    if hemoglobina < 12:
+        return "Anemia"
+    else:
+        return "No anemia"
+
+class App:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Sistema de Gesti贸n de Embarazadas")
+        self.root.geometry("720x450")
+        self.root.configure(bg='lightblue')
+
+        
+        self.model = None
+        self.scaler = None
+        self.cargar_modelo_y_escalador()
+
+        self.mostrar_bienvenida()
+
+    def cargar_modelo_y_escalador(self):
+        csv_path = r'D:\programa.py\datos_historicos.csv'
+        try:
+            data = pd.read_csv(csv_path)
+            data.fillna(0, inplace=True)
+
+            data['antecedentes'] = data[['sida', 'hipertension', 'diabetes', 'problemas_renales',
+                                         'enfermedades_autoinmunes', 'enfermedades_tiroides', 
+                                         'vih', 'cancer']].apply(lambda x: sum(2**i for i, v in enumerate(x) if v), axis=1)
+
+            X = data[['edad', 'altura', 'peso', 'presion', 'antecedentes']]
+            y = data['riesgo']
+
+            self.scaler = StandardScaler()
+            X_scaled = self.scaler.fit_transform(X)
+
+            X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+            
+            self.model = Sequential([
+                Dense(32, activation='relu', input_shape=(X_train.shape[1],)),
+                Dense(16, activation='relu'),
+                Dense(1, activation='sigmoid')
+            ])
+
+            self.model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+
+            
+            self.model.fit(X_train, y_train, epochs=10, batch_size=32, validation_split=0.2)
+
+            loss, accuracy = self.model.evaluate(X_test, y_test)
+            print(f'P茅rdida: {loss}, Precisi贸n: {accuracy}')
+
+            
+            self.model.save('modelo_embarazadas.h5')
+            joblib.dump(self.scaler, 'scaler_embarazadas.pkl')
+
+        except (FileNotFoundError, pd.errors.EmptyDataError, pd.errors.ParserError) as e:
+          
+            self.model = None
+            self.scaler = None
+
+    def mostrar_bienvenida(self):
+        self.frame_bienvenida = tk.Frame(self.root, bg='lightblue')
+        self.frame_bienvenida.place(relx=0.5, rely=0.5, anchor='center')
+
+        self.label_bienvenida = tk.Label(self.frame_bienvenida, text="Bienvenido al Sistema de Gesti贸n de Embarazadas", bg='lightblue', font=("Arial", 16))
+        self.label_bienvenida.pack(pady=10)
+
+        self.label_descripcion = tk.Label(self.frame_bienvenida, text="Este sistema permite calcular la fecha de parto, evaluar el riesgo \n y calcular IMC, hipertensi贸n y anemia de pacientes embarazadas.", bg='lightblue', font=("Arial", 12))
+        self.label_descripcion.pack(pady=10)
+
+        self.button_comenzar = tk.Button(self.frame_bienvenida, text="Comenzar", command=self.mostrar_menu, font=("Arial", 12), width=20, height=2)
+        self.button_comenzar.pack(pady=20)
+
+    def mostrar_menu(self):
+        self.frame_bienvenida.destroy()
+
+        self.frame_menu = tk.Frame(self.root, bg='lightblue')
+        self.frame_menu.place(relx=0.5, rely=0.5, anchor='center')
+
+        self.label_menu = tk.Label(self.frame_menu, text="Men煤", bg='lightblue', font=("Arial", 26))
+        self.label_menu.pack(pady=10)
+
+        self.button_fecha_parto = tk.Button(self.frame_menu, text="Calcular Fecha de Parto", command=self.mostrar_formulario_fecha_parto, font=("Arial", 12), width=20, height=2)
+        self.button_fecha_parto.pack(pady=10)
+
+        self.button_riesgo = tk.Button(self.frame_menu, text="Calcular Riesgo", command=self.mostrar_formulario_riesgo, font=("Arial", 12), width=20, height=2)
+        self.button_riesgo.pack(pady=10)
+
+        self.button_imc = tk.Button(self.frame_menu, text="Calcular IMC", command=self.mostrar_formulario_imc, font=("Arial", 12), width=20, height=2)
+        self.button_imc.pack(pady=10)
+
+        self.button_hipertension = tk.Button(self.frame_menu, text="Calcular Hipertensi贸n", command=self.mostrar_formulario_hipertension, font=("Arial", 12), width=20, height=2)
+        self.button_hipertension.pack(pady=10)
+
+        self.button_anemia = tk.Button(self.frame_menu, text="Calcular Anemia", command=self.mostrar_formulario_anemia, font=("Arial", 12), width=20, height=2)
+        self.button_anemia.pack(pady=10)
+
+    def mostrar_formulario_fecha_parto(self):
+        self.frame_menu.destroy()
+        self.frame_fecha_parto = tk.Frame(self.root, bg='lightblue')
+        self.frame_fecha_parto.place(relx=0.5, rely=0.5, anchor='center')
+
+        self.label_ultima_menstruacion = tk.Label(self.frame_fecha_parto, text="Fecha 脷ltima Menstruaci贸n (YYYY-MM-DD)", bg='lightblue', font=("Arial", 12))
+        self.label_ultima_menstruacion.pack()
+
+        self.entry_ultima_menstruacion = tk.Entry(self.frame_fecha_parto, font=("Arial", 15), width=15)
+        self.entry_ultima_menstruacion.pack()
+
+        self.label_duracion_periodo = tk.Label(self.frame_fecha_parto, text="Duraci贸n del Periodo (d铆as)", bg='lightblue', font=("Arial", 12))
+        self.label_duracion_periodo.pack()
+
+        self.entry_duracion_periodo = tk.Entry(self.frame_fecha_parto, font=("Arial", 15), width=15)
+        self.entry_duracion_periodo.pack()
+
+        self.button_calcular_fecha_parto = tk.Button(self.frame_fecha_parto, text="Calcular", command=self.calcular_fecha_parto, font=("Arial", 12), width=15, height=1)
+        self.button_calcular_fecha_parto.pack(pady=10)
+
+        self.button_volver = tk.Button(self.frame_fecha_parto, text="Volver al Men煤", command=self.volver_menu, font=("Arial", 12), width=15, height=1)
+        self.button_volver.pack(pady=10)
+
+    def calcular_fecha_parto(self):
+        ultima_menstruacion = self.entry_ultima_menstruacion.get()
+        duracion_periodo = int(self.entry_duracion_periodo.get())
+        fecha_parto = calcular_fecha_parto(ultima_menstruacion, duracion_periodo)
+        messagebox.showinfo("Fecha Probable de Parto", f"La fecha probable de parto es: {fecha_parto.strftime('%Y-%m-%d')}")
+
+    def mostrar_formulario_riesgo(self):
+        self.frame_menu.destroy()
+        self.frame_riesgo = tk.Frame(self.root, bg='lightblue')
+        self.frame_riesgo.place(relx=0.5, rely=0.5, anchor='center')
+
+        self.label_antecedentes = tk.Label(self.frame_riesgo, text="Seleccione los Antecedentes M茅dicos", bg='lightblue', font=("Arial", 12))
+        self.label_antecedentes.pack(pady=10)
+
+        
+        self.var_sida = tk.IntVar()
+        self.var_hipertension = tk.IntVar()
+        self.var_diabetes = tk.IntVar()
+        self.var_problemas_renales = tk.IntVar()
+        self.var_enfermedades_autoinmunes = tk.IntVar()
+        self.var_enfermedades_tiroides = tk.IntVar()
+        self.var_vih = tk.IntVar()
+        self.var_cancer = tk.IntVar()
+
+        
+        tk.Checkbutton(self.frame_riesgo, text="SIDA", variable=self.var_sida, bg='lightblue').pack(anchor='w')
+        tk.Checkbutton(self.frame_riesgo, text="Hipertensi贸n", variable=self.var_hipertension, bg='lightblue').pack(anchor='w')
+        tk.Checkbutton(self.frame_riesgo, text="Diabetes", variable=self.var_diabetes, bg='lightblue').pack(anchor='w')
+        tk.Checkbutton(self.frame_riesgo, text="Problemas Renales", variable=self.var_problemas_renales, bg='lightblue').pack(anchor='w')
+        tk.Checkbutton(self.frame_riesgo, text="Enfermedades Autoinmunes", variable=self.var_enfermedades_autoinmunes, bg='lightblue').pack(anchor='w')
+        tk.Checkbutton(self.frame_riesgo, text="Enfermedades de la Tiroides", variable=self.var_enfermedades_tiroides, bg='lightblue').pack(anchor='w')
+        tk.Checkbutton(self.frame_riesgo, text="VIH", variable=self.var_vih, bg='lightblue').pack(anchor='w')
+        tk.Checkbutton(self.frame_riesgo, text="C谩ncer", variable=self.var_cancer, bg='lightblue').pack(anchor='w')
+
+        self.label_presiones = tk.Label(self.frame_riesgo, text="Presiones Arteriales (Alta/Baja) en 5 d铆as", bg='lightblue', font=("Arial", 12))
+        self.label_presiones.pack(pady=10)
+
+        
+        self.entries_presion = []
+        for i in range(5):
+            frame_dia = tk.Frame(self.frame_riesgo, bg='lightblue')
+            frame_dia.pack(pady=5)
+            tk.Label(frame_dia, text=f"D铆a {i+1} - Alta", bg='lightblue').pack(side='left')
+            entry_alta = tk.Entry(frame_dia, font=("Arial", 12), width=5)
+            entry_alta.pack(side='left')
+            tk.Label(frame_dia, text="Baja", bg='lightblue').pack(side='left')
+            entry_baja = tk.Entry(frame_dia, font=("Arial", 12), width=5)
+            entry_baja.pack(side='left')
+            self.entries_presion.append((entry_alta, entry_baja))
+
+        self.button_calcular_riesgo = tk.Button(self.frame_riesgo, text="Calcular Riesgo", command=self.calcular_riesgo, font=("Arial", 12), width=15, height=1)
+        self.button_calcular_riesgo.pack(pady=10)
+
+        self.button_volver = tk.Button(self.frame_riesgo, text="Volver al Men煤", command=self.volver_menu, font=("Arial", 12), width=15, height=1)
+        self.button_volver.pack(pady=10)
+
+    def calcular_riesgo(self):
+        
+        antecedentes = [
+            self.var_sida.get(),
+            self.var_hipertension.get(),
+            self.var_diabetes.get(),
+            self.var_problemas_renales.get(),
+            self.var_enfermedades_autoinmunes.get(),
+            self.var_enfermedades_tiroides.get(),
+            self.var_vih.get(),
+            self.var_cancer.get()
+        ]
+        riesgo_antecedentes = sum(antecedentes)
+
+        presiones = []
+        for entry_alta, entry_baja in self.entries_presion:
+            try:
+                alta = float(entry_alta.get())
+                baja = float(entry_baja.get())
+                presiones.append((alta, baja))
+            except ValueError:
+                messagebox.showerror("Error", "Por favor, ingrese valores v谩lidos para las presiones arteriales.")
+                return
+
+        hipertension = es_hipertensa(presiones)
+
+        
+        
+
+    def mostrar_formulario_imc(self):
+        self.frame_menu.destroy()
+        self.frame_imc = tk.Frame(self.root, bg='lightblue')
+        self.frame_imc.place(relx=0.5, rely=0.5, anchor='center')
+
+        self.label_peso = tk.Label(self.frame_imc, text="Peso (kg)", bg='lightblue', font=("Arial", 12))
+        self.label_peso.pack()
+
+        self.entry_peso = tk.Entry(self.frame_imc, font=("Arial", 15), width=15)
+        self.entry_peso.pack()
+
+        self.label_altura = tk.Label(self.frame_imc, text="Altura (m)", bg='lightblue', font=("Arial", 12))
+        self.label_altura.pack()
+
+        self.entry_altura = tk.Entry(self.frame_imc, font=("Arial", 15), width=15)
+        self.entry_altura.pack()
+
+        self.button_calcular_imc = tk.Button(self.frame_imc, text="Calcular IMC", command=self.calcular_imc, font=("Arial", 12), width=15, height=1)
+        self.button_calcular_imc.pack(pady=10)
+
+        self.button_volver = tk.Button(self.frame_imc, text="Volver al Men煤", command=self.volver_menu, font=("Arial", 12), width=15, height=1)
+        self.button_volver.pack(pady=10)
+
+    def calcular_imc(self):
+        try:
+            peso = float(self.entry_peso.get())
+            altura = float(self.entry_altura.get())
+            resultado_imc = calcular_imc(peso, altura)
+            messagebox.showinfo("Resultado IMC", f"Su IMC es: {resultado_imc}")
+        except ValueError:
+            messagebox.showerror("Error", "Por favor, ingrese valores v谩lidos para peso y altura.")
+
+    def mostrar_formulario_hipertension(self):
+        self.frame_menu.destroy()
+        self.frame_hipertension = tk.Frame(self.root, bg='lightblue')
+        self.frame_hipertension.place(relx=0.5, rely=0.5, anchor='center')
+
+        self.label_presion = tk.Label(self.frame_hipertension, text="Presiones Arteriales (Alta/Baja) en 5 d铆as", bg='lightblue', font=("Arial", 12))
+        self.label_presion.pack(pady=10)
+
+        self.entries_presion = []
+        for i in range(5):
+            frame_dia = tk.Frame(self.frame_hipertension, bg='lightblue')
+            frame_dia.pack(pady=5)
+            tk.Label(frame_dia, text=f"D铆a {i+1} - Alta", bg='lightblue').pack(side='left')
+            entry_alta = tk.Entry(frame_dia, font=("Arial", 12), width=5)
+            entry_alta.pack(side='left')
+            tk.Label(frame_dia, text="Baja", bg='lightblue').pack(side='left')
+            entry_baja = tk.Entry(frame_dia, font=("Arial", 12), width=5)
+            entry_baja.pack(side='left')
+            self.entries_presion.append((entry_alta, entry_baja))
+
+        self.button_calcular_hipertension = tk.Button(self.frame_hipertension, text="Calcular Hipertensi贸n", command=self.calcular_hipertension, font=("Arial", 12), width=20, height=1)
+        self.button_calcular_hipertension.pack(pady=10)
+
+        self.button_volver = tk.Button(self.frame_hipertension, text="Volver al Men煤", command=self.volver_menu, font=("Arial", 12), width=20, height=1)
+        self.button_volver.pack(pady=10)
+
+    def calcular_hipertension(self):
+        # Obtener presiones arteriales
+        presiones = []
+        for entry_alta, entry_baja in self.entries_presion:
+            try:
+                alta = float(entry_alta.get())
+                baja = float(entry_baja.get())
+                presiones.append((alta, baja))
+            except ValueError:
+                messagebox.showerror("Error", "Por favor, ingrese valores v谩lidos para las presiones arteriales.")
+                return
+
+        hipertension = es_hipertensa(presiones)
+        if hipertension:
+            messagebox.showinfo("Resultado Hipertensi贸n", "Se ha detectado hipertensi贸n. Consulte a un m茅dico para un diagn贸stico preciso.")
+        else:
+            messagebox.showinfo("Resultado Hipertensi贸n", "No se ha detectado hipertensi贸n.")
+
+    def mostrar_formulario_anemia(self):
+        self.frame_menu.destroy()
+        self.frame_anemia = tk.Frame(self.root, bg='lightblue')
+        self.frame_anemia.place(relx=0.5, rely=0.5, anchor='center')
+
+        self.label_hemoglobina = tk.Label(self.frame_anemia, text="Resultado Hemoglobina (g/dL)", bg='lightblue', font=("Arial", 12))
+        self.label_hemoglobina.pack()
+
+        self.entry_hemoglobina = tk.Entry(self.frame_anemia, font=("Arial", 15), width=15)
+        self.entry_hemoglobina.pack()
+
+        self.button_calcular_anemia = tk.Button(self.frame_anemia, text="Calcular Anemia", command=self.calcular_anemia, font=("Arial", 12), width=15, height=1)
+        self.button_calcular_anemia.pack(pady=10)
+
+        self.button_volver = tk.Button(self.frame_anemia, text="Volver al Men煤", command=self.volver_menu, font=("Arial", 12), width=15, height=1)
+        self.button_volver.pack(pady=10)
+
+    def calcular_anemia(self):
+        try:
+            hemoglobina = float(self.entry_hemoglobina.get())
+            resultado_anemia = calcular_anemia(hemoglobina)
+            mensaje = "La paciente tiene anemia. Recomendaciones: Consulte a un hemat贸logo para una evaluaci贸n completa y tratamiento adecuado." if resultado_anemia == "Anemia" else "La paciente no tiene anemia."
+            messagebox.showinfo("Resultado Anemia", mensaje)
+        except ValueError:
+            messagebox.showerror("Error", "Por favor, ingrese un valor v谩lido para hemoglobina.")
+
+    def volver_menu(self):
+        self.frame_imc.destroy() if hasattr(self, 'frame_imc') else None
+        self.frame_hipertension.destroy() if hasattr(self, 'frame_hipertension') else None
+        self.frame_anemia.destroy() if hasattr(self, 'frame_anemia') else None
+        self.frame_riesgo.destroy() if hasattr(self, 'frame_riesgo') else None
+        self.mostrar_menu()
+
+
+  
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = App(root)
+    root.mainloop()
